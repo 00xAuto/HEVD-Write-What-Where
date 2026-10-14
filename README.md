@@ -3,7 +3,11 @@
  - #### Please note the this will depend on your target windows version, in my case, the token is at an offset of 0x4b8 from the base of EPROCESS of a specific process. (same goes for other objects)
  - #### I m student, I can make mistakes.
 ----
-Today I will be explaining something i've been facing alot of issues with recently. A Write What Where vulnerability.
+Today I will be explaining something i've been facing alot of issues with recently. A Write What Where vulnerability, Where I was able to escalate to administrator.
+
+HEVD is a project that is an intentionally vulnerable driver created by the HackSys team to help security researchers, reverse engineers, and students learn kernel-level exploitation and vulnerability analysis.
+
+And what i will be doing is exploiting that driver to show how a small bug could lead to a full system compromise as local administrator.
 
 You can setup HEVD from the blog post only, i will not be showing how to install and configure it here.
 
