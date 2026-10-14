@@ -1,6 +1,7 @@
 # HEVD-Write-What-Where
 
-## Please note the this will depend on your target windows version, in my case, the token is at an offset of 0x4b8 from the base of EPROCESS of a specific process. (same goes for other objects)
+ - #### Please note the this will depend on your target windows version, in my case, the token is at an offset of 0x4b8 from the base of EPROCESS of a specific process. (same goes for other objects)
+ - #### I m student, I can make mistakes.
 ----
 Today I will be explaining something i've been facing alot of issues with recently. A Write What Where vulnerability.
 
@@ -114,18 +115,16 @@ Kernel Memory
 For the last part of this phase, I will explain what RVA is.
 
 **RVA** (Relative Virtual Address) :
-```python
-Relative Virtual Address = PsInitialSystemProcess address - kernel base
-```
-And it is the global pointer variables in the kernel that points to the EPROCESS structure of the System processes.
-In simpler english, **IT HOLDS the address of the SYSTEM PROCESS**.
 
-We subtract that by the kernel base we get from EnumDeviceDrivers and then get the offset to the System process.
+An RVA is the offset of a symbol from its PE image's base address.
+We can't read kernel addresses directly from user mode, so instead we:
+1. Load ntoskrnl.exe into user space with `LoadLibraryExA`
+2. Find `PsInitialSystemProcess` in that user-side copy and subtract the user-side module base to get the RVA
+3. Add that same RVA to the real kernel base (from `EnumDeviceDrivers`) to get the live kernel address
 
-Here how it will look like (we will expand on this) :
-
-
-Referring to what we just talked about, that's how it would look like :
+`PsInitialSystemProcess` is a global pointer in ntoskrnl that holds the address of the SYSTEM EPROCESS.
+Dereferencing it gives us the base of SYSTEM's EPROCESS structure, which is our starting point for the process walk.
+Here how it will look like (we will expand on this) 
 
 ```cpp
 // Getting the real kernel base
@@ -194,8 +193,9 @@ Here is how it looks like, u can also refer to MSDN's documentation about it inc
 	printf("\n[+] address of base     : 0x%p", drivers[0]);
 ```
 
-We now officially have the kernel base, Which means we bypassed ASLR to an extent.
-
+We now officially have the kernel base. This works because `EnumDeviceDrivers` is a documented Windows API
+that leaks kernel module base addresses to any user-mode caller — an ASLR information disclosure
+via a legitimately exposed API, rather than an exploit bypass.
 
 On top of Getting the kernel base, we need 2 really important and crucial functions, a kernel read and write function, These will help us swap tokens and read them.
 
@@ -305,7 +305,7 @@ Look at commnets in the code below :
 			break;
 		}
 		flink = KernelRead(flink);
-		if (flink == start) {// Once the flink equals 0, print error.
+		if (flink == start) {// Flink has circled back to the start. Full list has been walked, process not found.
 			printf("\n[-] Not found.");
 			return 1;
 		}
@@ -317,6 +317,16 @@ Look at commnets in the code below :
 Basically, we will get the current process ID (PID), then flink will be pointed to the Active Process Links table.
 After that, we will create loop to look for our cmd.exe process in memory so we can write the SYSTEM token to our process. If myPid (our pid) is equal to  the UPID (Unique), then, myEproc (cmd) will hold the base EPROCESS address.
 
-And then finally, we will use our KernelWrite function to overwrite the SYSTEM process token to our process TOKEN, leading to an interactive shell as administrator (NT Authority\System) :
+And then finally, we will use our KernelWrite function to copy the SYSTEM process token into our own process's token field.
+`KernelWrite` reads from `sysEproc + 0x4b8` (SYSTEM's token) and writes it to `myEproc + 0x4b8` (our token),
+giving our process SYSTEM-level privileges and spawning an interactive NT AUTHORITY\SYSTEM shell: 
 
 <img width="1083" height="573" alt="image" src="https://github.com/user-attachments/assets/229e8a4f-0b89-435a-8dfe-757e247e808f" />
+
+> **Note:** `EPROCESS+0x4b8` is an `EX_FAST_REF` structure — the low 4 bits of the value are used
+> internally as a reference count, not part of the pointer. A raw copy works in practice because
+> the reference count is small and the kernel accepts the slightly dirty value. A cleaner approach
+> (used in shellcode-based token steals) masks those bits off first: `token & ~0xF`.
+
+
+That's all for this time. You can reach out in anyway and I will try my best to help. 
